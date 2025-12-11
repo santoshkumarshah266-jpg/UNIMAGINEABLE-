@@ -1,0 +1,184 @@
+# ZEN PARTICLES - PROJECT BLUEPRINT
+# Created: 2025-12-11
+# Deployment: GitHub Pages (repository: UNIMAGINEABLE-)
+
+================================================================================
+1. PROJECT OVERVIEW
+================================================================================
+ZenParticles is a real-time, interactive 3D particle meditation experience. It uses
+computer vision (MediaPipe) to track hand gestures via the webcam and control a 
+complex particle system rendered with Three.js and custom GLSL shaders.
+
+Key Features:
+- **Interactive Particles**: 20,000+ particles (4,000 points x 5 trail copies) simulated on the GPU.
+- **Hand Tension Control**: 
+  - Open Hand = Particles expand/breathe (Low Tension).
+  - Closed Fist = Particles contract/tighten (High Tension).
+- **Tension Lock (Ctrl Key)**: Press 'Ctrl' to lock particles in a fully contracted state, ignoring hand input. Press again to unlock.
+- **Shape Morphing (Snap Gesture)**: Pinch Thumb + Middle Finger (Snap) to cycle through 3D shapes.
+  - Shapes: Sphere, Heart3D, Flower, Saturn.
+- **Explosion Detection**: Quick hand clenching triggers a visual explosion effect.
+- **Keyboard Controls**: 
+  - Arrow Keys: Rotate the entire particle system.
+  - Keys 1-4: Direct shape selection.
+  - Keys A-W: Change color palette.
+
+================================================================================
+2. TECH STACK
+================================================================================
+- **Framework**: React 18 (Vite)
+- **Language**: TypeScript
+- **3D Engine**: Three.js / React Three Fiber / Drei
+- **Computer Vision**: @mediapipe/tasks-vision (Hand tracking)
+- **Styling**: TailwindCSS
+- **State Management**: React Hooks (useState, useCallback, useRef)
+
+================================================================================
+3. FILE STRUCTURE & CORE LOGIC
+================================================================================
+
+### /src/main.tsx
+Entry point for the React application. Renders <App /> into the root div.
+
+### /src/types.ts
+Defines the core data structures and enums.
+
+```typescript
+export enum ShapeType {
+    Sphere = 'Sphere',
+    Heart3D = 'Heart3D',
+    Flower = 'Flower',
+    Saturn = 'Saturn',
+}
+
+export interface ColorOption {
+    name: string;
+    value: string; // hex color
+    glow: string;  // secondary glow color
+}
+
+export interface ParticleUniforms {
+    uTime: { value: number };
+    uColor: { value: THREE.Color };
+    uTension: { value: number };
+    uExplosion: { value: number };
+    uShapeFactor: { value: number };
+}
+
+export interface HandTrackingState {
+    isTracking: boolean;
+    tension: number;
+    handX: number; // unused in current logic
+    handY: number; // unused in current logic
+    hasLeftHand: boolean;
+    error: string | null;
+}
+```
+
+### /src/utils/geometryFactory.ts
+Generates the 3D coordinates for different shapes. Returns a Float32Array of [x, y, z] coordinates.
+
+- **Sphere**: Standard spherical coordinates distribution.
+- **Heart3D**: Parametric heart equation with depth scaling.
+- **Flower**: 2D Rose curve with harmonic petal waves (z=0).
+- **Saturn**: Central sphere + randomized ring points.
+
+### /src/components/HandTracker.tsx
+Handles webcam input and MediaPipe integration.
+
+- **Setup**: Initializes `HandLandmarker` with GPU delegate.
+- **Video Loop**: Uses `requestAnimationFrame` to process video frames.
+- **Tension Calculation**:
+  - Measures distance from Wrist (0) to Middle Finger MCP (9) as "Palm Size".
+  - Measures sum of distances from Wrist to all 5 fingertips.
+  - Calculates ratio = AvgTipDistance / PalmSize.
+  - Maps ratio to 0.0-1.0 tension value (Open = 0, Closed = 1).
+- **Snap/Pinch Detection**:
+  - Calculates distance between Thumb Tip (4) and Middle Finger Tip (12).
+  - If distance < 0.05 (normalized) and cooldown passed -> Triggers `onSnap()`.
+- **Stale Closure Fix**: Uses `onUpdateRef` to ensure the tracking loop always calls the latest version of the callback (needed for Ctrl lock state).
+
+### /src/components/ParticleSystem.tsx
+The heart of the visualization. Renders `4000 * 5` particles using `THREE.Points`.
+
+- **Shaders**:
+  - **Vertex Shader**: 
+    - Morphs positions: `mix(startPos, targetPos, uMorph)`.
+    - Apply curl noise/turbulence based on `uOpenAmount` (1 - tension).
+    - Handle trail lag: `uTime - (aTrailIdx * 0.05)`.
+    - Apply breathing/pulsing effects.
+  - **Fragment Shader**: Renders soft glowing circular particles.
+- **Logic**:
+  - `useFrame`: Updates uniforms (uTime, uTension, uMorph) every frame.
+  - **Morphing**: When shape changes, current positions become `startPos`, new shape becomes `targetPos`, and `uMorph` animates from 0 to 1.
+  - **Trails**: Each particle has 5 "copies" with different `aTrailIdx` to create the trail effect.
+
+### /src/App.tsx
+The main controller component.
+
+- **State**:
+  - `shape`: Current 3D shape.
+  - `color`: Current color theme.
+  - `tension`: Current hand tension (0-1).
+  - `tensionLocked`: Boolean (Ctrl toggle).
+- **Logic**:
+  - `handleHandUpdate`: Updates tension ONLY if `!tensionLocked`.
+  - `toggleLock`: Listens for 'Control' key to set `tensionLocked` and force max tension (1).
+  - `handleSnap`: Cycles to the next shape in the Enum.
+- **Rendering**:
+  - Sets up `<Canvas>` with `<PerspectiveCamera>` and `<OrbitControls>`.
+  - Renders `<ParticleSystem>` and `<HandTracker>` (which is invisible).
+
+================================================================================
+4. KEY IMPLEMENTATION DETAILS (Reconstruction Guide)
+================================================================================
+
+If you need to rebuild this, follow these steps:
+
+1. **Initialize Project**:
+   `npm create vite@latest zen-particles -- --template react-ts`
+   `cd zen-particles`
+   `npm install three @types/three @react-three/fiber @react-three/drei @mediapipe/tasks-vision lucide-react clsx tailwind-merge`
+   `npm install -D tailwindcss postcss autoprefixer`
+   `npx tailwindcss init -p`
+
+2. **Configure Tailwind**:
+   Add typical `content` paths and custom colors in `tailwind.config.js`.
+
+3. **Copy Code**:
+   - Create the file structure listed above.
+   - Copy the logic descriptions to reimplement the shaders and hand tracking.
+   - Ensure `HandTracker.tsx` uses the specific efficient loop for MediaPipe to avoid lag.
+   - Verify `ParticleSystem.tsx` uses `attribute` buffers for position (start/target), randoms, and trail indices.
+
+================================================================================
+5. SPECIFIC SHADER CODE SNIPPETS (Crucial for visuals)
+================================================================================
+
+**Vertex Shader Math (Simplified):**
+```glsl
+vec3 basePos = mix(startPos, targetPos, uMorph);
+float openAmount = 1.0 - uTension;
+float timeLag = uTime - (aTrailIdx * 0.05);
+float noiseVal = snoise(basePos * 0.5 + timeLag * 0.2) * openAmount;
+vec3 finalPos = basePos + dir * (noiseVal * 0.5) + dir * expansion;
+```
+
+**Tension Logic:**
+In `HandTracker.tsx`, we calibrate:
+- Open Hand Ratio (Tips far from wrist) ~= 1.8
+- Closed Fist Ratio (Tips close to wrist) ~= 0.8
+- `tension = (1.8 - currentRatio) / (1.8 - 0.8)`
+
+================================================================================
+6. CURRENT SHAPES
+================================================================================
+1. Sphere
+2. Heart3D
+3. Flower
+4. Saturn
+(Buddha and Fireworks were removed as per user request).
+
+================================================================================
+END OF BLUEPRINT
+================================================================================
