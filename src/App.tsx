@@ -128,6 +128,8 @@ function App() {
                 setShape(ShapeType.Flower);
             } else if (keyLower === '4') {
                 setShape(ShapeType.Saturn);
+            } else if (keyLower === '5') {
+                setShape(ShapeType.Prasamsha);
             } else {
                 // A-W for colors
                 const keyIndex = keyLower.charCodeAt(0) - 97;

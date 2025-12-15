@@ -19,6 +19,7 @@ const vertexShader = `
   uniform float uExplosion;
   uniform float uMorph;
   uniform vec3 uColor;
+  uniform float uHeartbeat;
   
   attribute vec3 startPos;
   attribute vec3 targetPos;
@@ -108,6 +109,22 @@ const vertexShader = `
     
     // Subtle size pulsing even when closed
     float sizePulse = 1.0 + breathe * 0.5;
+    
+    // Heartbeat logic
+    if (uHeartbeat > 0.5) {
+        float beat = sin(uTime * 4.0) * 0.5 + 0.5; // 0 to 1
+        beat = pow(beat, 3.0); // Make it snappy
+        float heartScale = 1.0 + beat * 0.15;
+        
+        // Pulse position from center
+        vec3 centerDir = normalize(basePos);
+        vec3 pulsePos = basePos * heartScale;
+        
+        // Replace finalPos logic slightly for heartbeat
+        finalPos = mix(finalPos, pulsePos + subtleMove, 0.5);
+        sizePulse += beat * 0.5;
+    }
+
     float tensionSize = 1.0 + openAmount * 2.0;
     gl_PointSize = (aScale * 40.0 * tensionSize * sizePulse * (1.0 - aTrailIdx * 0.15)) / -mvPosition.z;
     
@@ -238,6 +255,7 @@ const ParticleSystem: React.FC<ParticleSystemProps> = ({
         uTension: { value: 0 },
         uExplosion: { value: 0 },
         uMorph: { value: 1 },
+        uHeartbeat: { value: 0 },
     }), []);
 
     useFrame((state) => {
@@ -260,6 +278,10 @@ const ParticleSystem: React.FC<ParticleSystemProps> = ({
             }
             materialRef.current.uniforms.uExplosion.value = explosionVal.current;
             materialRef.current.uniforms.uColor.value.set(color.value);
+
+            // Heartbeat effect for Prasamsha shape
+            const isHeartShape = shape === ShapeType.Prasamsha;
+            materialRef.current.uniforms.uHeartbeat.value = isHeartShape ? 1.0 : 0.0;
         }
 
         // Apply keyboard rotation

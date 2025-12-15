@@ -3,6 +3,7 @@ export enum ShapeType {
     Heart3D = 'Heart3D',
     Flower = 'Flower',
     Saturn = 'Saturn',
+    Prasamsha = 'Prasamsha',
 }
 
 export interface ColorOption {
